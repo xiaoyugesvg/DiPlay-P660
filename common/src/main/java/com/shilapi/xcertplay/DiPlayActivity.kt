@@ -5644,19 +5644,32 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 .setNegativeButton(getString(R.string.later), null).show(); return
         }
         val devices = runCatching { adapter.bondedDevices.sortedBy { it.name ?: "" } }.getOrDefault(emptyList())
-        if (devices.isEmpty()) {
+        // HSAE head units hold the paired phones in com.hsae.bluetoothservice, so Android's
+        // bondedDevices is often empty here even though the car Bluetooth has the iPhone.
+        val vendorDevices = NissanP170Bluetooth.phones(this)
+        val useVendor = devices.isEmpty() && vendorDevices.isNotEmpty()
+        if (devices.isEmpty() && vendorDevices.isEmpty()) {
             appDialogBuilder().setTitle(getString(R.string.pair_your_iphone))
                 .setMessage(getString(R.string.on_your_iphone_open_settings_bluetooth_and_pair_with_the_c))
                 .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openBluetoothSettings() }
                 .setNegativeButton(getString(R.string.got_it), null).show(); return
         }
         appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
-            .setItems(devices.map { device ->
-                val name = device.name ?: getString(R.string.paired_device)
-                if (devices.count { it.name == device.name } > 1) "$name · ${device.address.takeLast(5)}" else name
-            }.toTypedArray()) { _, index ->
-                val device = devices[index]
-                DiPlayPreferences.savePhone(this, device.address, device.name ?: "iPhone")
+            .setItems(if (useVendor) {
+                vendorDevices.map { d -> "${d.name} · ${d.address.takeLast(5)}" }.toTypedArray()
+            } else {
+                devices.map { device ->
+                    val name = device.name ?: getString(R.string.paired_device)
+                    if (devices.count { it.name == device.name } > 1) "$name · ${device.address.takeLast(5)}" else name
+                }.toTypedArray()
+            }) { _, index ->
+                if (useVendor) {
+                    val device = vendorDevices[index]
+                    DiPlayPreferences.savePhone(this, device.address, device.name)
+                } else {
+                    val device = devices[index]
+                    DiPlayPreferences.savePhone(this, device.address, device.name ?: "iPhone")
+                }
                 val start = pendingWireless; pendingWireless = false
                 render()
                 if (start) connect(true)

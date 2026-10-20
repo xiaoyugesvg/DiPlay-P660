@@ -23,6 +23,7 @@ import android.os.SystemClock
 import com.shilapi.xcertplay.BluetoothDiagnosticSnapshot
 import android.provider.Settings
 import android.util.Log
+import com.shilapi.xcertplay.NissanP170Bluetooth
 import com.shilapi.xcertplay.airplay.AirPlayListenerIdentity
 import com.shilapi.xcertplay.airplay.AirPlayTcpAccepted
 import com.shilapi.xcertplay.airplay.AirPlayConfig
@@ -2516,9 +2517,24 @@ class CarPlayController(
 
     private fun selectWirelessBluetoothDevice(adapter: BluetoothAdapter): BluetoothDevice {
         val bonded = adapter.bondedDevices.orEmpty()
+        // HSAE head units keep the paired phones in com.hsae.bluetoothservice, so Android's
+        // bondedDevices can be empty even though the car Bluetooth knows the iPhone.
+        val vendorPhones = NissanP170Bluetooth.phones(appContext)
         config.wirelessBluetoothDeviceAddress?.let { selected ->
-            return bonded.firstOrNull { it.address.equals(selected, ignoreCase = true) }
-                ?: throw IOException("The selected iPhone is no longer paired. Choose it again in DiPlay.")
+            val address = bonded.firstOrNull { it.address.equals(selected, ignoreCase = true) }?.address
+                ?: vendorPhones.firstOrNull { it.address.equals(selected, ignoreCase = true) }?.address
+                ?: throw IOException("The selected iPhone is no longer paired. Pair it with the car Bluetooth first.")
+            val name = vendorPhones.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name ?: "iPhone"
+            NissanP170Bluetooth.prepareForCarPlay(appContext, address, name)
+            return adapter.getRemoteDevice(address)
+        }
+        if (bonded.isEmpty() && vendorPhones.isNotEmpty()) {
+            val phone = vendorPhones.firstOrNull { it.name.contains("iPhone", ignoreCase = true) }
+                ?: vendorPhones.singleOrNull()
+                ?: throw IOException("Multiple phones are paired in the car. Select the iPhone in DiPlay first.")
+            NissanP170Bluetooth.prepareForCarPlay(appContext, phone.address, phone.name)
+            Log.i(IphoneCarPlayConfiguration.TAG, "wireless Bluetooth using car phone ${phone.name} ${phone.address}")
+            return adapter.getRemoteDevice(phone.address)
         }
         val iPhones = bonded.filter { device ->
             device.name?.contains("iPhone", ignoreCase = true) == true
@@ -2537,21 +2553,25 @@ class CarPlayController(
             }
             iPhones.filter { it.address in connectedAddresses }
         }
-        if (connectedIPhones.size == 1) return connectedIPhones.single()
+        val prepared = { device: BluetoothDevice ->
+            NissanP170Bluetooth.prepareForCarPlay(appContext, device.address, device.name ?: "iPhone")
+            device
+        }
+        if (connectedIPhones.size == 1) return prepared(connectedIPhones.single())
         if (connectedIPhones.size > 1) {
             throw IOException(
                 "Multiple connected iPhones found: " +
                     connectedIPhones.joinToString { "${it.name ?: "iPhone"} (${it.address})" },
             )
         }
-        if (iPhones.size == 1) return iPhones.single()
+        if (iPhones.size == 1) return prepared(iPhones.single())
         if (iPhones.size > 1) {
             throw IOException(
                 "Multiple bonded iPhones found and none is currently connected; " +
                     "connect one iPhone and retry",
             )
         }
-        if (bonded.size == 1) return bonded.single()
+        if (bonded.size == 1) return prepared(bonded.single())
         throw IOException(
             "No unambiguous bonded iPhone found; pair one iPhone and retry",
         )
