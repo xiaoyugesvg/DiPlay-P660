@@ -12,6 +12,11 @@ import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+/**
+ * Nissan/HSAE head units (P170, and the P660/P760 family that runs the same
+ * `com.hsae.bluetoothservice`) keep the paired phones in the vendor Bluetooth service, so
+ * Android's own `bondedDevices` is empty whenever the car stack owns the radio.
+ */
 object NissanP170Bluetooth {
     private const val TAG = "NissanP170BT"
     private const val PKG = "com.hsae.bluetoothservice"
