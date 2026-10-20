@@ -1832,16 +1832,21 @@ class CarPlayController(
             !wirelessHandoffRequested.get() || wirelessActiveReported.get() || wirelessTunnelReady.get()) {
             return@synchronized
         }
-        // Session establishment alone also occurs on black-screen failures. Only a rendered
-        // frame proves that projection is usable when the optional tunneled control is absent.
-        if (activeSession != null && wirelessConnectionProof.hasRenderedFrame(generation)) {
+        // A rendered frame is the usual proof that projection is usable, but some head units
+        // never report frame statistics even while the picture is fine. Those units then tore
+        // down a working session every 45 s and reconnected in a loop, so an AirPlay session
+        // that is still current is enough to keep the projection alive on the Bluetooth
+        // bootstrap. Only a missing session is treated as a real handoff failure.
+        val sessionCurrent = activeSession != null && wirelessConnectionProof.hasActiveSession(generation)
+        if (sessionCurrent) {
             if (!wirelessActiveReported.compareAndSet(false, true)) return@synchronized
             wirelessHandoffFellBack.set(true)
             // The Bluetooth link is the only iAP2 channel here. Closing it would stop NowPlaying,
             // route guidance and call updates for the rest of the session, so keep it until the
             // tunnel really takes over (see maybeCompleteWirelessHandoff).
-            debugLog("wireless handoff fallback after rendered video; tunnel iAP2 unavailable; " +
-                "preserving AirPlay and keeping the Bluetooth bootstrap for iAP2 control")
+            debugLog("wireless handoff fallback; tunnel iAP2 unavailable; " +
+                "preserving the current AirPlay session and keeping the Bluetooth bootstrap for iAP2 control " +
+                "rendered=${wirelessConnectionProof.hasRenderedFrame(generation)}")
             onStatus(CarPlayStatus.WirelessActiveFallback, generation)
         } else {
             closeWirelessStack(generation = generation)
@@ -3165,7 +3170,7 @@ class CarPlayController(
         private const val PERMISSION_POLL_INTERVAL_MILLIS = 500L
         private const val PERMISSION_POLL_TIMEOUT_MILLIS = 120_000L
         private const val DEVICE_AVAILABILITY_POLL_INTERVAL_MILLIS = 2_000L
-        private const val WIRELESS_HANDOFF_TIMEOUT_MILLIS = 45_000L
+        private const val WIRELESS_HANDOFF_TIMEOUT_MILLIS = 90_000L
         private const val RFCOMM_CONNECT_TIMEOUT_MILLIS = 15_000L
         private const val MAXIMUM_REENUMERATION_ATTEMPTS = 2
         /** An iPhone answers the mode request within about a second; one took six (#335). */
