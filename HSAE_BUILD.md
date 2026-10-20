@@ -27,12 +27,14 @@ DiPlay 自带简体中文（`values-zh-rCN`），0.2.21 的 1115 条字符串里
 
 1. 把源码推到 GitHub 仓库。
 2. Actions → `Build DiPlay P660 APK` → `Run workflow`。
-3. 构建完成后在该次运行页面下载 `DiPlay-P660-debug` 产物。
+3. 构建完成后在该次运行页面下载 `DiPlay-P660-standalone-debug` 产物。
 
-本地构建：JDK 17 + Android SDK（platform 37、build-tools 36.0.0、NDK 28.2.13676358），然后
+本工作流跑的是 `:mobile:assembleStandaloneDebug`，会先下载上游 release APK、用 `SHA256SUMS.txt` 校验，再从中取出 `assets/offline-mfi/identity.pk8` 与 `certificate.p7b`，经 `DIPLAY_AUTH_ASSETS_DIR` 注入构建。仓库本身不保存这两份凭据。
+
+本地构建：JDK 17 + Android SDK（platform 37、build-tools 36.0.0、NDK 28.2.13676358），准备好存放 `offline-mfi/` 的目录后
 
 ```
-./gradlew :mobile:assembleDebug
+DIPLAY_AUTH_ASSETS_DIR=/absolute/path/to/runtime-assets ./gradlew :mobile:assembleStandaloneDebug
 ```
 
 ## 安装到车机

@@ -10,6 +10,8 @@ permissions:
 
 env:
   GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+  DIPLAY_RELEASE_VERSION: "0.2.21"
+  DIPLAY_RELEASE_REPO: "shihabal3amri/DiPlay"
 
 jobs:
   build:
@@ -49,8 +51,36 @@ jobs:
           java -version
           ./gradlew --version
 
-      - name: Build debug APK
-        run: ./gradlew :mobile:assembleDebug --stacktrace --no-daemon
+      # The repository intentionally never stores the accessory identity, so the CarPlay
+      # authentication assets are taken from the upstream release APK at build time.
+      # They stay in the runner temp dir and are never committed or uploaded separately.
+      - name: Provision MFi identity from upstream release
+        id: auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_NAME="DiPlay-${DIPLAY_RELEASE_VERSION}.apk"
+          BASE="https://github.com/${DIPLAY_RELEASE_REPO}/releases/download/v${DIPLAY_RELEASE_VERSION}"
+          WORK="$RUNNER_TEMP/release"
+          ASSETS="$RUNNER_TEMP/runtime-assets"
+          mkdir -p "$WORK" "$ASSETS"
+          curl -fsSL --retry 3 --retry-delay 2 -o "$WORK/$APK_NAME" "$BASE/$APK_NAME"
+          curl -fsSL --retry 3 --retry-delay 2 -o "$WORK/SHA256SUMS.txt" "$BASE/SHA256SUMS.txt"
+          ( cd "$WORK" && grep -E "  ${APK_NAME}\$" SHA256SUMS.txt | sha256sum -c - )
+          unzip -o -q "$WORK/$APK_NAME" 'assets/offline-mfi/*' -d "$WORK/unpacked"
+          mkdir -p "$ASSETS/offline-mfi"
+          cp "$WORK/unpacked/assets/offline-mfi/identity.pk8" "$ASSETS/offline-mfi/identity.pk8"
+          cp "$WORK/unpacked/assets/offline-mfi/certificate.p7b" "$ASSETS/offline-mfi/certificate.p7b"
+          test -s "$ASSETS/offline-mfi/identity.pk8"
+          test -s "$ASSETS/offline-mfi/certificate.p7b"
+          rm -rf "$WORK"
+          ls -l "$ASSETS/offline-mfi"
+          echo "dir=$ASSETS" >> "$GITHUB_OUTPUT"
+
+      - name: Build standalone debug APK with MFi identity
+        env:
+          DIPLAY_AUTH_ASSETS_DIR: ${{ steps.auth.outputs.dir }}
+        run: ./gradlew :mobile:assembleStandaloneDebug --stacktrace --no-daemon
 
       - name: Find APK
         id: apk
@@ -61,10 +91,18 @@ jobs:
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "APK=$APK"
 
+      - name: Verify MFi identity is inside the APK
+        shell: bash
+        run: |
+          APK="${{ steps.apk.outputs.path }}"
+          unzip -l "$APK" | grep -q 'assets/offline-mfi/identity.pk8'
+          unzip -l "$APK" | grep -q 'assets/offline-mfi/certificate.p7b'
+          echo "identity.pk8 sha256: $(unzip -p "$APK" assets/offline-mfi/identity.pk8 | sha256sum | cut -d' ' -f1)"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DiPlay-P660-debug
+          name: DiPlay-P660-standalone-debug
           path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
           retention-days: 14
