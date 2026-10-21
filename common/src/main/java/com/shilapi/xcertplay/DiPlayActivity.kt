@@ -793,11 +793,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         addView(appearanceButton(), LinearLayout.LayoutParams(dp(if (compact) 44 else 52), dp(if (compact) 44 else 52)).apply {
             marginEnd = dp(if (compact) 8 else 12)
         })
-        addView(headerButton(if (page == "home") getString(R.string.car_home) else getString(R.string.back),
-            if (page == "home") R.drawable.ic_dp_car else R.drawable.ic_dp_back, compact) {
-            if (page == "home") startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
-            else navigateBack()
-        }, LinearLayout.LayoutParams(-2, if (compact) dp(44) else dp(52)))
+        // The home page has no car-home shortcut: the car's own launcher key already does that,
+        // and the small car icon on the header read as the head unit's own branding.
+        if (page != "home") {
+            addView(headerButton(getString(R.string.back), R.drawable.ic_dp_back, compact) {
+                navigateBack()
+            }, LinearLayout.LayoutParams(-2, if (compact) dp(44) else dp(52)))
+        }
     }
 
     private fun navigateBack() {

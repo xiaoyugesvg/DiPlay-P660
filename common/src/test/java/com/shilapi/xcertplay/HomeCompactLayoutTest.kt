@@ -45,7 +45,10 @@ class HomeCompactLayoutTest {
         val usbPosition = IntArray(2).also(usb::getLocationOnScreen)
         if (landscape) assertTrue(usbPosition[0] >= connectPosition[0] + connect.width)
         else assertTrue(usbPosition[1] >= connectPosition[1] + connect.height)
-        assertTrue(text(R.string.car_home).visibility == View.VISIBLE)
+        // The compact header no longer offers a car-home shortcut on the home page.
+        assertTrue(descendants(root).filterIsInstance<TextView>().none {
+            it.text == activity.getString(R.string.car_home)
+        })
         assertFalse(descendants(root).filterIsInstance<TextView>().any {
             it.text == activity.getString(R.string.a_familiar_drive) ||
                 it.text == activity.getString(R.string.plug_your_iphone_into_a_usb_data_port_allow_carplay_when_y)
