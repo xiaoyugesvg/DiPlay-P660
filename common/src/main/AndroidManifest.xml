@@ -167,6 +167,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- CarLetter head units (P660/P760) send the steering-wheel media keys as a broadcast
+             instead of a KeyEvent; forward them to CarPlay. -->
+        <receiver
+            android:name="com.shilapi.xcertplay.CarLetterMediaReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.carletter.action.MEDIA_CONTROL" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name="com.shilapi.xcertplay.UsbAutoConfirmService"
             android:exported="true"
